@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Interactive Photo Gallery</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --border: #2a2a2a;
+      --accent: #c9a96e;
+      --accent-focus: #f0c97e;
+      --text: #f0ece4;
+      --muted: #6b6b6b;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 20px;
+    }
+
+    /* Skip link for keyboard/screen reader users */
+    .skip-link {
+      position: absolute;
+      top: -999px;
+      left: 6px;
+      background: var(--accent);
+      color: #000;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      z-index: 9999;
+      text-decoration: none;
+    }
+    .skip-link:focus { top: 6px; }
+
+    header { text-align: center; margin-bottom: 60px; }
+
+    header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    header h1 span { color: var(--accent); }
+
+    header p {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 300;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── PREVIEW DISPLAY ── */
+    #image {
+      width: min(700px, 100%);
+      height: 380px;
+      background-color: var(--surface);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 1.15rem;
+      color: var(--muted);
+      letter-spacing: 0.03em;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s ease;
+      margin-bottom: 16px;
+    }
+
+    #image::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 60%);
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #image.active::before { opacity: 1; }
+    #image.active { border-color: var(--accent); }
+
+    #image .caption {
+      position: absolute;
+      bottom: 20px;
+      left: 24px;
+      font-family: 'Playfair Display', serif;
+      font-size: 1.25rem;
+      color: #fff;
+      z-index: 2;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      max-width: 90%;
+    }
+
+    #image.active .caption {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Keyboard hint bar */
+    .hint {
+      width: min(700px, 100%);
+      text-align: right;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 40px;
+      letter-spacing: 0.04em;
+    }
+
+    kbd {
+      background: var(--border);
+      border: 1px solid #444;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: 0.75rem;
+      color: var(--text);
+      font-family: monospace;
+    }
+
+    /* ── THUMBNAIL GRID ── */
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 14px;
+      width: min(700px, 100%);
+    }
+
+    .gallery img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      border-radius: 3px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+      display: block;
+    }
+
+    .gallery img:hover {
+      transform: scale(1.04);
+      border-color: var(--accent);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+
+    /* Visible focus ring — WCAG 2.4.7 */
+    .gallery img:focus {
+      outline: 3px solid var(--accent-focus);
+      outline-offset: 3px;
+      border-color: var(--accent-focus);
+      box-shadow: 0 0 0 5px rgba(201,169,110,0.3);
+      transform: scale(1.04);
+    }
+
+    footer {
+      margin-top: 70px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body onload="addTabIndex()">
+
+  <!-- Skip navigation for keyboard/screen reader users -->
+  <a class="skip-link" href="#gallery">Skip to gallery</a>
+
+  <header>
+    <h1>Photo <span>Gallery</span></h1>
+    <p>Hover or focus an image below to preview it</p>
+  </header>
+
+  <!--
+    PREVIEW AREA
+    role="img"      — tells assistive tech this is an image region
+    aria-live="polite" — announces changes to screen readers without interrupting
+    aria-atomic="true" — reads the whole label when it changes
+  -->
+  <div
+    id="image"
+    role="img"
+    aria-label="Image preview area. No image selected."
+    aria-live="polite"
+    aria-atomic="true"
+  >
+    <span class="default-text">Hover over an image below to display here.</span>
+    <span class="caption" aria-hidden="true"></span>
+  </div>
+
+  <p class="hint">
+    Use <kbd>Tab</kbd> to navigate &amp; <kbd>Space</kbd> / <kbd>Enter</kbd> to toggle preview
+  </p>
+
+  <!-- THUMBNAILS — role="list" groups them semantically -->
+  <div class="gallery" id="gallery" role="list" aria-label="Photo thumbnail gallery">
+
+    <img
+      src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80"
+      alt="Mountain Sunrise: golden light breaking over jagged snow-capped alpine peaks"
+      role="listitem"
+      onmouseover="upDate(this)"
+      onmouseout="undo()"
+      onfocus="upDate(this)"
+      onblur="undo()"
+    />
+
+    <img
+      src="https://images.unsplash.com/photo-1511884642898-4c92249e20b6?w=600&q=80"
+      alt="Forest Path: a misty trail winding through towering ancient green trees"
+      role="listitem"
+      onmouseover="upDate(this)"
+      onmouseout="undo()"
+      onfocus="upDate(this)"
+      onblur="undo()"
+    />
+
+    <img
+      src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&q=80"
+      alt="Tropical Beach: calm turquoise water lapping a pristine white sand shore"
+      role="listitem"
+      onmouseover="upDate(this)"
+      onmouseout="undo()"
+      onfocus="upDate(this)"
+      onblur="undo()"
+    />
+
+    <img
+      src="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=600&q=80"
+      alt="Snowy Peaks: dramatic snow-capped mountains rising under a clear starry night sky"
+      role="listitem"
+      onmouseover="upDate(this)"
+      onmouseout="undo()"
+      onfocus="upDate(this)"
+      onblur="undo()"
+    />
+
+    <img
+      src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=600&q=80"
+      alt="Golden Valley: sweeping rolling hills bathed in warm late afternoon sunlight"
+      role="listitem"
+      onmouseover="upDate(this)"
+      onmouseout="undo()"
+      onfocus="upDate(this)"
+      onblur="undo()"
+    />
+
+    <img
+      src="https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=600&q=80"
+      alt="Desert Dunes: sweeping orange sand dunes stretching beneath a vivid cloudless blue sky"
+      role="listitem"
+      onmouseover="upDate(this)"
+      onmouseout="undo()"
+      onfocus="upDate(this)"
+      onblur="undo()"
+    />
+
+  </div>
+
+  <footer>Interactive Photo Gallery &mdash; GitHub Pages</footer>
+
+  <script>
+    var imageDiv    = document.getElementById('image');
+    var captionEl   = imageDiv.querySelector('.caption');
+    var defaultText = imageDiv.querySelector('.default-text');
+
+    /*
+     * upDate()
+     * Triggered by: onmouseover, onfocus
+     * Updates the preview div with the hovered/focused image
+     */
+    function upDate(previewPic) {
+      console.log('upDate triggered!');
+      console.log('  alt:', previewPic.alt);
+      console.log('  src:', previewPic.src);
+
+      // Change the background image of #image
+      imageDiv.style.backgroundImage = "url('" + previewPic.src + "')";
+
+      // Change the text of #image caption to the alt value
+      captionEl.textContent = previewPic.alt;
+
+      // Update aria-label so screen readers announce the change
+      imageDiv.setAttribute('aria-label', 'Now previewing: ' + previewPic.alt);
+
+      // Hide the default placeholder text
+      defaultText.style.display = 'none';
+
+      // Activate the overlay + border highlight
+      imageDiv.classList.add('active');
+    }
+
+    /*
+     * undo()
+     * Triggered by: onmouseout, onblur
+     * Resets the preview div back to its default state
+     */
+    function undo() {
+      console.log('undo triggered — resetting preview to default');
+
+      // Reset background image back to empty
+      imageDiv.style.backgroundImage = "url('')";
+
+      // Reset caption text
+      captionEl.textContent = '';
+
+      // Reset aria-label
+      imageDiv.setAttribute('aria-label', 'Image preview area. No image selected.');
+
+      // Restore the placeholder text
+      defaultText.style.display = '';
+
+      // Remove active styling
+      imageDiv.classList.remove('active');
+    }
+
+    /*
+     * addTabIndex()
+     * Triggered by: onload (on <body>)
+     * Loops through every gallery image and sets tabindex="0"
+     * so keyboard users can Tab to each image
+     */
+    function addTabIndex() {
+      console.log('addTabIndex triggered — page has fully loaded');
+
+      var images = document.querySelectorAll('.gallery img');
+
+      for (var i = 0; i < images.length; i++) {
+        images[i].tabIndex = 0;
+        console.log('  tabindex="0" added to image ' + i + ': ' + images[i].alt);
+      }
+    }
+  </script>
+
+</body>
+</html>
